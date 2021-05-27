@@ -65,9 +65,12 @@
  * v23 - 23/05/2020
  * топики mqtt разделены на топики управления ctrl и топики статуса state
  * добавлены флаги retain вместо топиков синхронизации (connect_mqtt_v03)
+ * 
+ * v30 - 26/05/2021
+ * переход mqtt на clusterfly
  */
 
-
+ 
 
 #define PIN_LED          1  // встроенный светодиод
 #define PIN_water_sensor 2  // вход датчика влажности
@@ -121,6 +124,7 @@ const int DELAY_ALARM_TIME = 500;         // время до срабатыва�
 bool Water_sensor_flag = false;      // флаг сигнала от датчика протечки
 bool Water_alarm_flag = false;       // флаг тревоги протечки воды
 bool Motion_flag = false;            // флаг наличия движения
+bool High_humidity_flag = false;     // флаг высокой влажности
 byte Manual_mode = OFF;              // режим ленты, управляемый через Blynk
 bool Send_Email_flag = false;        // флаг отправленного сообщения по данной протечке
 
@@ -138,6 +142,7 @@ const char topic_led_ctrl[] = "/sv.lipatnikov@gmail.com/bath/led_ctrl";
 // топики состояний
 const char topic_water_alarm[] = "/sv.lipatnikov@gmail.com/bath/alarm_state";
 const char topic_led_state[] = "/sv.lipatnikov@gmail.com/bath/led_state";
+
 
 //=========================================================================================
 
@@ -164,12 +169,14 @@ void loop() {
   if ((long)millis() - Manual_mode_time > MAX_MANUAL_PERIOD) 
     Manual_mode = OFF;
     
-  if (Water_alarm_flag)  LED_effect = ALARM; 
-  else if (Manual_mode)  LED_effect = Manual_mode;  
-  else if (Motion_flag)  LED_effect = HELLO;     
-  else                   LED_effect = OFF;
+  if (Water_alarm_flag)        LED_effect = ALARM; 
+  else if (Manual_mode)        LED_effect = Manual_mode;  
+  else if (Motion_flag)        LED_effect = HELLO;  
+  else if (High_humidity_flag) LED_effect = RAINBOW;
+  else                         LED_effect = OFF;
   LED_strip(LED_effect);
   
+  // отправка режима на сервер mqtt
   if (LED_effect != last_LED_effect) {
     MQTT_publish_int(topic_led_state, LED_effect);
     last_LED_effect = LED_effect;      
@@ -204,30 +211,6 @@ void loop() {
 
 
 //=========================================================================================
-//функции MQTT
-
-// функция подписки на топики !!!
-void MQTT_subscribe(void) {
-  if (client.connected()){
-    client.subscribe(topic_led_ctrl);
-  }
-}
-
-// получение данных от сервера
-void mqtt_get(char* topic, byte* payload, unsigned int length) {
-  // создаем копию полученных данных
-  char localPayload[length + 1];
-  for (int i=0;i<length;i++) { localPayload[i] = (char)payload[i];  }
-  localPayload[length] = 0;
-
-  if (strcmp(topic, topic_led_ctrl) == 0) {  
-    int ivalue = 0; sscanf(localPayload, "%d", &ivalue);
-    Manual_mode = (byte)ivalue; 
-    if (Manual_mode) Manual_mode_time = millis();
-  }
-}
-
-//=========================================================================================
 // чтение датчика протечки
 
 bool Read_water_sensor() {
@@ -244,38 +227,4 @@ bool Read_water_sensor() {
   
   if (Water_sensor_flag && ((long)millis() - Water_alarm_flag_time >= DELAY_ALARM_TIME) )  return true;
   else return false; 
-}
-
-
-//=========================================================================================
-// функции UDP 
-
-unsigned long Last_UDP_send_time;             // время крайней отправки по udp
-const int     UDP_SEND_PERIOD = 3000;         // частота отправки пакетов UDP
-
-// функция отправки по UDP
-void Send_UDP (char data[UDP_TX_PACKET_MAX_SIZE]) {
-  if ((long)millis() - Last_UDP_send_time > UDP_SEND_PERIOD) {
-    Last_UDP_send_time = millis();  
-    Udp.beginPacket(IP_Toilet_controller , 8888);
-    Udp.write(data);
-    Udp.endPacket();
-  }
-}
-
-
-unsigned long Last_UDP_receive_time;             // время крайнего приема по udp
-const int     UDP_receive_wait_time = 10 * 1000; // время устаревания данных, принятых по UDP
-
-// прием пакетов по UDP
-void Receive_UDP (void) {
-  int packetSize = Udp.parsePacket();
-  if (packetSize)  {
-    Last_UDP_receive_time = millis(); 
-    int len = Udp.read(Buffer, UDP_TX_PACKET_MAX_SIZE); 
-    if ((len == 2) && (Buffer[0] == 'm') && (Buffer[1] == '1')) Motion_flag = true;  // есть движение
-    if ((len == 2) && (Buffer[0] == 'm') && (Buffer[1] == '0')) Motion_flag = false; // движения нет
-  }
-  if ((long)millis() - Last_UDP_receive_time > UDP_receive_wait_time) 
-    Motion_flag = false;                                                            // если нет приема по UDP - сбрасываем флаг
 }
