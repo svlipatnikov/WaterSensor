@@ -99,7 +99,6 @@ IPAddress IP_Toilet_controller (192, 168, 1, 54);
 
 #include <WiFiUdp.h>
 WiFiUDP Udp;
-unsigned char ip_toilet_realy[] = {192,168,43,88};
 unsigned int localPort = 8888;
 char Buffer[UDP_TX_PACKET_MAX_SIZE]; 
 
@@ -137,11 +136,11 @@ byte LED_effect = OFF;                        // текущий эфффект �
 byte last_LED_effect = OFF;                   // эфффект светодиодной ленты на предыдущем такте 
 
 // топик управления лентой
-const char topic_led_ctrl[] = "/sv.lipatnikov@gmail.com/bath/led_ctrl";
+const char topic_led_ctrl[] = "user_1502445e/bath/led_ctrl";
 
 // топики состояний
-const char topic_water_alarm[] = "/sv.lipatnikov@gmail.com/bath/alarm_state";
-const char topic_led_state[] = "/sv.lipatnikov@gmail.com/bath/led_state";
+const char topic_water_alarm[] = "user_1502445e/bath/alarm";
+const char topic_led_state[] = "user_1502445e/bath/led";
 
 
 //=========================================================================================
@@ -157,6 +156,9 @@ void setup() {
   Connect_WiFi(IP_Water_sensor_bath, NEED_STATIC_IP); 
   Connect_mqtt(mqtt_client_name);
   MQTT_subscribe();
+
+  MQTT_publish_int(topic_water_alarm, false);
+  MQTT_publish_int(topic_led_state, OFF);
 }
 
 //=========================================================================================
@@ -225,6 +227,8 @@ bool Read_water_sensor() {
     MQTT_publish_int(topic_water_alarm, 1);         // если протечка есть отправляем 1
   } 
   
-  if (Water_sensor_flag && ((long)millis() - Water_alarm_flag_time >= DELAY_ALARM_TIME) )  return true;
-  else return false; 
+  if (Water_sensor_flag && ((long)millis() - Water_alarm_flag_time >= DELAY_ALARM_TIME) )  
+    return true;
+  else 
+    return false; 
 }

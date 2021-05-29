@@ -4,13 +4,12 @@
 // функция отправки по UDP
 
 unsigned long Last_UDP_send_time;             // время крайней отправки по udp
-const int     UDP_SEND_PERIOD = 3000;         // частота отправки пакетов UDP
-
+const int     UDP_SEND_PERIOD = 1000;         // частота отправки пакетов UDP
 
 void Send_UDP (char data[UDP_TX_PACKET_MAX_SIZE]) {
   if ((long)millis() - Last_UDP_send_time > UDP_SEND_PERIOD) {
     Last_UDP_send_time = millis();  
-    Udp.beginPacket(IP_Toilet_controller , 8888);
+    Udp.beginPacket(IP_Toilet_controller, localPort);
     Udp.write(data);
     Udp.endPacket();
   }
